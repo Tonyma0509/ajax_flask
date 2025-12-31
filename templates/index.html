@@ -21,11 +21,11 @@
         <div class="container mt-5">
             <!-- <div class="row justify-content-center"> -->
             <button id="buttonStart" class="btn btn-primary">Ajax 開始</button>
-            <button id="buttonStart" class="btn btn-primary">Ajax 結束</button>
+            <button id="buttonEnd" class="btn btn-primary">Ajax 結束</button>
             <img id="img1" src="static/images/Loading.gif" style="display: none;" alt="載入中..." />
 
 
-            <div id="divInfo" class="alert mt-5"></div>
+            <div id="divInfo" class="alert alert-info mt-5"></div>
         </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -34,6 +34,108 @@
         const divInfo = document.querySelector('#divInfo');
         const imgLoader = document.querySelector('#img1');
         const btnStart = document.querySelector('#buttonStart');
+        const btnEnd = document.querySelector('#buttonEnd');
+
+        let abortController = null;
+        btnStart.addEventListener('click', async () => {
+            const apiUrl = 'http://127.0.0.1:5000/api/hello';
+            abortController = new AbortController();
+            const signal = abortController.signal;   //產生一個訊號 
+
+
+            // console.log(fetch(apiUrl));
+            //Promise 物件寫法1
+            // fetch(apiUrl)
+            //     .then(res => {
+            //         // console.log(res);
+            //         // console.log(res.headers.get('Content-Type')); //從header取資料
+            //         // console.log(res.headers.get('Content-Length'));
+            //         // console.log(res.status);
+            //         // console.log(res.ok);
+            //         // console.log(res.body);
+            //         // console.log(res.json()); //讀取 body 中 json 格式的資料，回傳的又是一個promise物件
+            //         return res.json();
+            //     })
+            //     //將上面回應的資料轉為JSON格式丟到下方的then繼續處理
+            //     .then(data => {
+            //         console.log(data)
+            //     })
+
+            //寫法2 再簡化
+            // fetch(apiUrl)
+            //     .then(res => res.json()) //簡化為1行(無大括號)，return也一併省略
+            //     .then(data => {
+            //         // divInfo.textContent = JSON.stringify(data); //JSON物件轉成JSON字串
+            //         divInfo.textContent = data.message;
+            //     })
+
+
+            // async/await基本寫法
+            // const response = await fetch(apiUrl);
+
+            //     //加入條件判斷
+            // if (response.ok) {
+            //     const contentType = response.headers.get('content-type');
+            //     if (contentType && contentType.includes('application/json')) {
+            //         const data = await response.json();
+            //         divInfo.innerHTML = `<h2>${data.message}</h2>`
+            //         console.log("成功取得資料", data);
+            //         return data;
+            //     } else {
+            //         console.log('回傳資料格式不正確!!');
+            //     }
+            // } else {
+            //     if (response.status >= 500) {
+            //         console.log('伺服器發生錯誤!!')
+            //     } else if (response.status >= 400) {
+            //         console.log('呼叫錯誤!!')
+            //     } else {
+            //         console.log('請聯絡客服!!')
+            //     }
+            //     console.log('status：', response.status);
+            // }
+
+            // 將上述程式包在try、catch中
+
+            //3秒內沒有回傳結果就終止fetch的執行
+            const timer = setTimeout(() => {
+                abortController.abort('api執行逾時');
+            }, 3000)
+
+
+            try {
+                imgLoader.style.display = 'inline'; //顯示執行中的圖示
+                btnStart.disabled = true;    //隱藏「執行」的按鈕，避免重複點擊
+
+                // 有可能發生錯誤的程式碼包進try catch中
+                // const response = await fetch(apiUrl);
+                const response = await fetch(apiUrl, { signal });
+                const contentType = response.headers.get('content-type');
+                if (!response.ok || !contentType.includes('application/json')) throw new Error('有錯誤，無法取得資料');
+                const data = await response.json();
+                divInfo.innerHTML = `<h2>${data.message}</h2>`
+                console.log("成功取得資料", data);
+
+            } catch (error) {
+                //console.log(error);
+                if (signal.aborted) { //true 表示取消了
+                    divInfo.textContent = error;
+                } else {
+                    divInfo.textContent = error.message;
+                }
+            } finally {
+                imgLoader.style.display = 'none'; //執行結束，隱藏執行中的圖示
+                btnStart.disabled = false;    //恢復「執行」按鈕的功能
+                clearTimeout(timer); //若資料提前跑完，可透過清除計時的功能，讓資料馬上回傳，就不用等到程式碼指定時間
+            }
+
+        })
+
+        btnEnd.addEventListener('click', () => {
+            if (abortController) {
+                abortController.abort('您停止程式執行'); //取消 fetch() 的執行
+            }
+        })
 
     </script>
 </body>
