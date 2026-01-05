@@ -2,6 +2,14 @@ from flask import request, abort
 from flask_restful import Resource
 import os, uuid
 from werkzeug.utils import secure_filename
+from PIL import Image
+import models_loader
+from dotenv import load_dotenv
+from google import genai
+
+load_dotenv() # 載入 .env
+
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 class QueryStringDemo(Resource):
     def get(self):
@@ -32,10 +40,32 @@ class JsonDemo(Resource):
         
         name = data.get('name')
         age = data.get('age')
+
+        # 情緒分析
+        feedback = data.get('feedback')
+        result = models_loader.classifier(feedback)[0] # 既有的模型分析
+        print(result)
         
-        return {"method": "JSON", "received": data}, 201
+        # 結合Genmini給建議
+        prompt = f"""
+            學生的評論是{feedback}
+            AI判定情緒是{result['label']}，信心度{result['score']}
+            請以教學顧問的身分給予50字以內的教學改善建議。
+        """
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt
+        )
+        print(response.text)
+        # 增加以模型跑情緒分析'
+        return {"method": "JSON", 
+                "received": data,
+                "sentiment": result['label'],
+                "score": f"{round(result['score'],4):.1%}", # 轉成百分比
+                "suggestion": response
+                }, 201
     
-UPLOAD_FOLDER = os.path.join('static', 'uploads')
+UPLOAD_FOLDER = os.path.join('static', 'uploads')  # 設定圖片上傳後要存在static資料夾裡面的uploads資料夾
 
 class ImageUploadDemo(Resource):
     def get(self):
@@ -49,21 +79,35 @@ class ImageUploadDemo(Resource):
         if not image or image.filename == '':
             abort(400, description="請選擇圖片檔案")
 
-        original_filename = secure_filename(image.filename)
+        original_filename = secure_filename(image.filename)  # secure_filename()，預防裡面有惡意連結
         ext = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else 'jpg'
+        # ext儲存附檔名
 
         # 允許的副檔名集合
-        ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+        ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
         if ext not in ALLOWED_EXTENSIONS:
             abort(400, description="只能上傳圖片")
 
-        # 產生全新的 UUID 檔名
+        # 產生全新的 UUID 檔名，uuid會產生不同路徑的資料
         new_filename = f"{uuid.uuid4().hex}.{ext}"
 
         filepath = os.path.join(UPLOAD_FOLDER, new_filename)
         image.save(filepath)
 
+        # 影像描述 【引用models_loader.py檔載入的功能】
+        # 讀取圖片
+        raw_image = Image.open(filepath).convert('RGB')
+        # 處理圖片
+        inputs = models_loader.processor(raw_image, return_tensors="pt")
+        # 生成文字
+        out = models_loader.model.generate(**inputs, max_new_tokens=50)
+        
+        # 4. 解碼輸出
+        description = models_loader.processor.decode(out[0], skip_special_tokens=True)
+
+
         return {
             'message': '檔案上傳成功',
-            'url': f'{UPLOAD_FOLDER}\{new_filename}'
+            'url': filepath, #f'{UPLOAD_FOLDER}\{new_filename}'
+            'description': description
         }

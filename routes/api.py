@@ -7,7 +7,9 @@ from resources.address_api import  CityResource, DistrictResource, RoadResource
 from resources.demo_api import QueryStringDemo, PathDemo, FormDataDemo, JsonDemo, ImageUploadDemo
 from resources.spot_api import Spots, SpotCategoryStats, SpotsByDistrict, SpotTitleSearch
 from resources.users_api import Users, User
-
+from models_loader import init_all_models
+#載入模型
+init_all_models()
 
 api_bp = Blueprint('api', __name__)
 api = Api(api_bp)
